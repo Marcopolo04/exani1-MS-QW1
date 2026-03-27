@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador EXANI-I CENEVAL</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --secondary: #1e40af;
+            --success: #22c55e;
+            --error: #ef4444;
+            --bg: #f3f4f6;
+            --card: #ffffff;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background-color: var(--card);
+            width: 90%;
+            max-width: 600px;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        h1, h2 { color: #1f2937; }
+
+        .hidden { display: none; }
+
+        /* Inputs */
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+
+        /* Buttons */
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+            margin-top: 10px;
+            transition: background 0.3s;
+        }
+
+        .btn:hover { background-color: var(--secondary); }
+        .btn:disabled { background-color: #9ca3af; cursor: not-allowed; }
+
+        /* Timer */
+        #timer {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--error);
+            margin-bottom: 1rem;
+        }
+
+        /* Question Styles */
+        .question-meta {
+            display: flex;
+            justify-content: space-between;
+            color: #6b7280;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+
+        .options-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .option-btn {
+            background-color: white;
+            border: 2px solid #e5e7eb;
+            color: #374151;
+            padding: 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.2s;
+        }
+
+        .option-btn:hover { border-color: var(--primary); background-color: #eff6ff; }
+        
+        /* Feedback States */
+        .correct { background-color: #dcfce7 !important; border-color: var(--success) !important; color: #14532d !important; }
+        .incorrect { background-color: #fee2e2 !important; border-color: var(--error) !important; color: #7f1d1d !important; }
+
+        /* Results */
+        .score-circle {
+            width: 150px;
+            height: 150px;
+            background: var(--primary);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin: 20px auto;
+        }
+        
+        .loading {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- PANTALLA DE LOGIN -->
+        <div id="login-screen">
+            <h1>Simulador EXANI-I</h1>
+            <p>48 Preguntas | 3 Opciones | Cronómetro</p>
+            <input type="text" id="username" placeholder="Tu Nombre Completo" required>
+            <input type="email" id="useremail" placeholder="Tu Correo Electrónico" required>
+            <button class="btn" onclick="startExam()">Comenzar Examen</button>
+        </div>
+
+        <!-- PANTALLA DE EXAMEN -->
+        <div id="exam-screen" class="hidden">
+            <div id="timer">00:00</div>
+            <div class="question-meta">
+                <span id="q-number">Pregunta 1/48</span>
+                <span id="q-category">Matemáticas</span>
+            </div>
+            <h2 id="q-text">Texto de la pregunta...</h2>
+            <div class="options-grid" id="options-container">
+                <!-- Opciones generadas por JS -->
+            </div>
+            <div id="feedback-msg" style="margin-top:15px; font-weight:bold;"></div>
+            <button id="next-btn" class="btn hidden" onclick="nextQuestion()">Siguiente Pregunta</button>
+        </div>
+
+        <!-- PANTALLA DE RESULTADOS -->
+        <div id="result-screen" class="hidden">
+            <h2>Examen Finalizado</h2>
+            <div class="score-circle" id="final-score">0%</div>
+            <p id="result-msg">Enviando resultados...</p>
+            <div class="loading" id="loading-spinner"></div>
+        </div>
+    </div>
+
+<script>
+    // CONFIGURACIÓN: PEGA AQUÍ LA URL DE TU GOOGLE APPS SCRIPT
+    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx-qRIajUlQDVRarKfz89cUel2o2VBTrPhEi3D88vM17-cOlHHIu_rX9RfXGAa9AXNi/exec'; 
+
+    // BASE DE DATOS DE PREGUNTAS (48 Preguntas representativas EXANI-I)
+    const questions = [
+        // PENSAMIENTO MATEMÁTICO (1-12)
+        { q: "Si un triángulo tiene lados de 3cm, 4cm y 5cm, ¿qué tipo de triángulo es?", options: ["Equilátero", "Rectángulo", "Isósceles"], correct: 1, cat: "Matemáticas" },
+        { q: "¿Cuál es el resultado de: 8 + 4 * 2?", options: ["24", "16", "20"], correct: 1, cat: "Matemáticas" },
+        { q: "Si x + 5 = 12, ¿cuánto vale x?", options: ["5", "6", "7"], correct: 2, cat: "Matemáticas" },
+        { q: "¿Cuál es el 20% de 150?", options: ["20", "30", "40"], correct: 1, cat: "Matemáticas" },
+        { q: "Simplifica la expresión: 2x + 3x - x", options: ["4x", "5x", "6x"], correct: 0, cat: "Matemáticas" },
+        { q: "¿Cuál es el área de un cuadrado de lado 5cm?", options: ["20 cm²", "25 cm²", "10 cm²"], correct: 1, cat: "Matemáticas" },
+        { q: "¿Cuánto es 3 elevado a la 3?", options: ["9", "18", "27"], correct: 2, cat: "Matemáticas" },
+        { q: "Si un coche recorre 120km en 2 horas, ¿cuál es su velocidad promedio?", options: ["50 km/h", "60 km/h", "70 km/h"], correct: 1, cat: "Matemáticas" },
+        { q: "¿Cuál es la raíz cuadrada de 144?", options: ["10", "11", "12"], correct: 2, cat: "Matemáticas" },
+        { q: "En una bolsa hay 3 bolas rojas y 2 azules. ¿Probabilidad de sacar una roja?", options: ["3/5", "2/5", "1/2"], correct: 0, cat: "Matemáticas" },
+        { q: "¿Cuál es el perímetro de un rectángulo de base 4 y altura 3?", options: ["12", "14", "7"], correct: 1, cat: "Matemáticas" },
+        { q: "Si A = {1, 2, 3} y B = {3, 4, 5}, ¿cuál es A ∪ B?", options: ["{3}", "{1, 2, 3, 4, 5}", "{1, 2, 4, 5}"], correct: 1, cat: "Matemáticas" },
+
+        // PENSAMIENTO ANALÍTICO (13-24)
+        { q: "Completa la serie: 2, 4, 8, 16, ...", options: ["24", "32", "30"], correct: 1, cat: "Analítico" },
+        { q: "Si 'Algunos A son B' y 'Todos los B son C', entonces:", options: ["Algunos A son C", "Todos los A son C", "Ningún A es C"], correct: 0, cat: "Analítico" },
+        { q: "¿Qué palabra no pertenece al grupo? Perro, Gato, Lobo, Mesa", options: ["Perro", "Gato", "Mesa"], correct: 2, cat: "Analítico" },
+        { q: "Analogía: Pintor es a Pincel como Escultor es a...", options: ["Mármol", "Cincel", "Estatua"], correct: 1, cat: "Analítico" },
+        { q: "Si ayer fue martes, ¿qué día será pasado mañana?", options: ["Jueves", "Viernes", "Sábado"], correct: 1, cat: "Analítico" },
+        { q: "Completa: Luna es a Noche como Sol es a...", options: ["Día", "Calor", "Luz"], correct: 0, cat: "Analítico" },
+        { q: "Si 5 máquinas hacen 5 artículos en 5 minutos, ¿cuánto tardan 100 máquinas en hacer 100 artículos?", options: ["100 min", "5 min", "20 min"], correct: 1, cat: "Analítico" },
+        { q: "¿Qué número falta? 1, 1, 2, 3, 5, 8, ...", options: ["11", "13", "15"], correct: 1, cat: "Analítico" },
+        { q: "Si el padre de Juan es el hijo de mi padre, ¿qué soy yo de Juan?", options: ["Su padre", "Su tío", "Su hermano"], correct: 0, cat: "Analítico" },
+        { q: "Encuentra el intruso: Madrid, París, Londres, Europa", options: ["Madrid", "París", "Europa"], correct: 2, cat: "Analítico" },
+        { q: "Si giras 90 grados a la derecha y luego 180 a la izquierda, ¿hacia dónde miras respecto al inicio?", options: ["Izquierda", "Derecha", "Atrás"], correct: 0, cat: "Analítico" },
+        { q: "Completa la serie: A, C, E, G, ...", options: ["H", "I", "J"], correct: 1, cat: "Analítico" },
+
+        // ESTRUCTURA DE LA LENGUA (25-36)
+        { q: "Selecciona la oración con ortografía correcta.", options: ["El té está caliente.", "El te está caliente.", "El te esta caliente."], correct: 0, cat: "Español" },
+        { q: "¿Cuál es el sinónimo de 'Efímero'?", options: ["Duradero", "Breve", "Eterno"], correct: 1, cat: "Español" },
+        { q: "Identifica el sujeto en: 'Los niños juegan en el parque'.", options: ["Juegan", "En el parque", "Los niños"], correct: 2, cat: "Español" },
+        { q: "¿Cuál palabra está escrita correctamente?", options: ["Exhuberante", "Exuberante", "Exuberante"], correct: 1, cat: "Español" },
+        { q: "El antónimo de 'Cauteloso' es:", options: ["Prudente", "Imprudente", "Cuidadoso"], correct: 1, cat: "Español" },
+        { q: "¿Qué tipo de palabra es 'rápidamente'?", options: ["Adjetivo", "Adverbio", "Sustantivo"], correct: 1, cat: "Español" },
+        { q: "Completa: 'Ayer ___ al cine'.", options: ["fui", "fuí", "fuy"], correct: 0, cat: "Español" },
+        { q: "¿Cuál es el núcleo del sujeto en 'La casa roja es grande'?", options: ["La", "Casa", "Roja"], correct: 1, cat: "Español" },
+        { q: "Selecciona la opción con acento diacrítico correcto.", options: ["El té", "El te", "El té"], correct: 0, cat: "Español" },
+        { q: "¿Qué figura literaria es: 'Sus cabellos son de oro'?", options: ["Símil", "Metáfora", "Hipérbole"], correct: 1, cat: "Español" },
+        { q: "Oración compuesta:", options: ["Juan corre.", "Juan corre y María baila.", "Corriendo rápido."], correct: 1, cat: "Español" },
+        { q: "¿Cuál es el plural de 'lápiz'?", options: ["Lápizes", "Lápices", "Lapices"], correct: 1, cat: "Español" },
+
+        // COMPRENSIÓN LECTORA (37-42)
+        { q: "Lee: 'El agua hierve a 100°C'. ¿A qué temperatura hierve el agua?", options: ["50°C", "100°C", "0°C"], correct: 1, cat: "Lectura" },
+        { q: "Idea principal: 'La contaminación afecta la salud'.", options: ["La salud es buena", "La contaminación es mala", "El aire es limpio"], correct: 1, cat: "Lectura" },
+        { q: "Inferencia: Si Juan lleva paraguas, probablemente...", options: ["Hace sol", "Va a llover", "Tiene calor"], correct: 1, cat: "Lectura" },
+        { q: "Tono del texto: '¡Qué maravilloso día!', es...", options: ["Triste", "Eufórico", "Neutral"], correct: 1, cat: "Lectura" },
+        { q: "Sinónimo contextual: 'El atleta es ágil'. Ágil significa...", options: ["Lento", "Rápido/Hábil", "Fuerte"], correct: 1, cat: "Lectura" },
+        { q: "Propósito del texto: Una receta de cocina busca...", options: ["Informar", "Instruir", "Entretener"], correct: 1, cat: "Lectura" },
+
+        // INGLÉS BÁSICO (43-48)
+        { q: "Translate: 'Good morning'", options: ["Buenas noches", "Buenos días", "Buenas tardes"], correct: 1, cat: "Inglés" },
+        { q: "Select the verb: 'She runs fast'", options: ["She", "Runs", "Fast"], correct: 1, cat: "Inglés" },
+        { q: "Complete: 'I ___ a student.'", options: ["is", "are", "am"], correct: 2, cat: "Inglés" },
+        { q: "Opposite of 'Big'", options: ["Small", "Large", "Huge"], correct: 0, cat: "Inglés" },
+        { q: "Plural of 'Child'", options: ["Childs", "Children", "Childrens"], correct: 1, cat: "Inglés" },
+        { q: "Question word: '___ is your name?'", options: ["Who", "What", "Where"], correct: 1, cat: "Inglés" }
+        // --- INICIO DE LAS 45 PREGUNTAS DE CIENCIAS ---
+        // BIOLOGÍA (15 preguntas)
+        { q: "Unidad básica estructural y funcional de los seres vivos:", options: ["Tejido", "Célula", "Órgano"], correct: 1, cat: "Biología" },
+        { q: "Proceso mediante el cual las plantas producen su alimento:", options: ["Respiración", "Fotosíntesis", "Fermentación"], correct: 1, cat: "Biología" },
+        { q: "Molécula que contiene la información genética:", options: ["ARN", "ADN", "Proteína"], correct: 1, cat: "Biología" },
+        { q: "Organelo encargado de producir energía en la célula:", options: ["Mitocondria", "Ribosoma", "Núcleo"], correct: 0, cat: "Biología" },
+        { q: "Reino al que pertenecen las bacterias:", options: ["Fungi", "Monera", "Plantae"], correct: 1, cat: "Biología" },
+        { q: "Tipo de división celular que produce gametos:", options: ["Mitosis", "Meiosis", "Fisión binaria"], correct: 1, cat: "Biología" },
+        { q: "Sistema encargado de transportar oxígeno en la sangre:", options: ["Digestivo", "Circulatorio", "Nervioso"], correct: 1, cat: "Biología" },
+        { q: "Organismo que produce su propio alimento se llama:", options: ["Heterótrofo", "Autótrofo", "Descomponedor"], correct: 1, cat: "Biología" },
+        { q: "Enfermedad causada por la falta de insulina:", options: ["Hipertensión", "Diabetes", "Anemia"], correct: 1, cat: "Biología" },
+        { q: "Parte de la planta encargada de la absorción de agua:", options: ["Hoja", "Tallo", "Raíz"], correct: 2, cat: "Biología" },
+        { q: "Grupo de animales que tienen columna vertebral:", options: ["Invertebrados", "Vertebrados", "Artrópodos"], correct: 1, cat: "Biología" },
+        { q: "Proceso de cambio de las especies a lo largo del tiempo:", options: ["Evolución", "Metamorfosis", "Adaptación"], correct: 0, cat: "Biología" },
+        { q: "Células encargadas de la defensa del organismo:", options: ["Glóbulos rojos", "Glóbulos blancos", "Plaquetas"], correct: 1, cat: "Biología" },
+        { q: "Órgano principal del sistema respiratorio humano:", options: ["Corazón", "Pulmones", "Hígado"], correct: 1, cat: "Biología" },
+        { q: "Nutriente principal para obtener energía inmediata:", options: ["Proteínas", "Carbohidratos", "Vitaminas"], correct: 1, cat: "Biología" },
+
+        // FÍSICA (15 preguntas)
+        { q: "Ley que establece que 'a toda acción corresponde una reacción':", options: ["1ª Ley de Newton", "2ª Ley de Newton", "3ª Ley de Newton"], correct: 2, cat: "Física" },
+        { q: "Unidad de medida de la fuerza en el Sistema Internacional:", options: ["Joule", "Newton", "Watt"], correct: 1, cat: "Física" },
+        { q: "Capacidad de realizar trabajo:", options: ["Potencia", "Energía", "Fuerza"], correct: 1, cat: "Física" },
+        { q: "Cambio de posición de un cuerpo respecto a un punto de referencia:", options: ["Velocidad", "Movimiento", "Aceleración"], correct: 1, cat: "Física" },
+        { q: "Fuerza de atracción que ejerce la Tierra sobre los cuerpos:", options: ["Magnetismo", "Gravedad", "Fricción"], correct: 1, cat: "Física" },
+        { q: "Magnitud que indica la rapidez con dirección:", options: ["Rapidez", "Velocidad", "Aceleración"], correct: 1, cat: "Física" },
+        { q: "Tipo de energía que posee un cuerpo en movimiento:", options: ["Potencial", "Cinética", "Térmica"], correct: 1, cat: "Física" },
+        { q: "Instrumento para medir la temperatura:", options: ["Barómetro", "Termómetro", "Cronómetro"], correct: 1, cat: "Física" },
+        { q: "Flujo de cargas eléctricas a través de un conductor:", options: ["Voltaje", "Resistencia", "Corriente"], correct: 2, cat: "Física" },
+        { q: "Propiedad de los cuerpos de mantener su estado de reposo o movimiento:", options: ["Inercia", "Masa", "Peso"], correct: 0, cat: "Física" },
+        { q: "Onda que necesita un medio material para propagarse:", options: ["Electromagnética", "Mecánica", "Luminosa"], correct: 1, cat: "Física" },
+        { q: "Cambio de estado de líquido a gas:", options: ["Fusión", "Evaporación", "Sublimación"], correct: 1, cat: "Física" },
+        { q: "Unidad de medida de la resistencia eléctrica:", options: ["Amperio", "Voltio", "Ohmio"], correct: 2, cat: "Física" },
+        { q: "Velocidad de la luz en el vacío (aprox):", options: ["300,000 km/s", "150,000 km/s", "1,000 km/s"], correct: 0, cat: "Física" },
+        { q: "Fuerza que se opone al movimiento entre dos superficies:", options: ["Normal", "Fricción", "Tensión"], correct: 1, cat: "Física" },
+
+        // QUÍMICA (15 preguntas)
+        { q: "Partícula subatómica con carga negativa:", options: ["Protón", "Neutrón", "Electrón"], correct: 2, cat: "Química" },
+        { q: "Símbolo químico del Oro:", options: ["Ag", "Au", "Or"], correct: 1, cat: "Química" },
+        { q: "Tipo de enlace donde se comparten electrones:", options: ["Iónico", "Covalente", "Metálico"], correct: 1, cat: "Química" },
+        { q: "Sustancia con pH menor a 7:", options: ["Base", "Neutra", "Ácida"], correct: 2, cat: "Química" },
+        { q: "Tabla que organiza los elementos químicos:", options: ["Mendeleiev", "Periódica", "Atómica"], correct: 1, cat: "Química" },
+        { q: "Mezcla donde no se distinguen sus componentes:", options: ["Heterogénea", "Homogénea", "Compuesta"], correct: 1, cat: "Química" },
+        { q: "Cambio donde se altera la composición de la materia:", options: ["Físico", "Químico", "Mecánico"], correct: 1, cat: "Química" },
+        { q: "Número de protones en el núcleo de un átomo:", options: ["Masa atómica", "Número atómico", "Valencia"], correct: 1, cat: "Química" },
+        { q: "Gas más abundante en la atmósfera terrestre:", options: ["Oxígeno", "Nitrógeno", "Dióxido de carbono"], correct: 1, cat: "Química" },
+        { q: "Fórmula del agua:", options: ["HO", "H2O", "H2O2"], correct: 1, cat: "Química" },
+        { q: "Proceso de oxidación rápida con desprendimiento de calor:", options: ["Combustión", "Corrosión", "Fermentación"], correct: 0, cat: "Química" },
+        { q: "Elemento base de la química orgánica:", options: ["Oxígeno", "Carbono", "Hidrógeno"], correct: 1, cat: "Química" },
+        { q: "Estado de la materia con forma y volumen definidos:", options: ["Líquido", "Gas", "Sólido"], correct: 2, cat: "Química" },
+        { q: "Sustancia que acelera una reacción química:", options: ["Inhibidor", "Catalizador", "Reactivo"], correct: 1, cat: "Química" },
+        { q: "Ión con carga positiva se llama:", options: ["Anión", "Catión", "Neutrón"], correct: 1, cat: "Química" },
+        // --- FIN DE LAS PREGUNTAS DE CIENCIAS ---
+    ];
+
+    // VARIABLES DE ESTADO
+    let currentQuestionIndex = 0;
+    let score = 0;
+    let timerInterval;
+    let timeLeft = 3600; // 60 minutos en segundos
+    let userData = { nombre: '', correo: '' };
+
+    // ELEMENTOS DOM
+    const loginScreen = document.getElementById('login-screen');
+    const examScreen = document.getElementById('exam-screen');
+    const resultScreen = document.getElementById('result-screen');
+    const timerDisplay = document.getElementById('timer');
+
+    function startExam() {
+        const name = document.getElementById('username').value;
+        const email = document.getElementById('useremail').value;
+
+        if (!name || !email) {
+            alert("Por favor ingresa tu nombre y correo");
+            return;
+        }
+
+        userData.nombre = name;
+        userData.correo = email;
+
+        loginScreen.classList.add('hidden');
+        examScreen.classList.remove('hidden');
+        
+        startTimer();
+        loadQuestion();
+    }
+
+    function startTimer() {
+        timerInterval = setInterval(() => {
+            timeLeft--;
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            
+            if (timeLeft <= 0) {
+                finishExam();
+            }
+        }, 1000);
+    }
+
+    function loadQuestion() {
+        const q = questions[currentQuestionIndex];
+        document.getElementById('q-number').textContent = `Pregunta ${currentQuestionIndex + 1}/${questions.length}`;
+        document.getElementById('q-category').textContent = q.cat;
+        document.getElementById('q-text').textContent = q.q;
+        document.getElementById('feedback-msg').textContent = '';
+        document.getElementById('next-btn').classList.add('hidden');
+
+        const optionsContainer = document.getElementById('options-container');
+        optionsContainer.innerHTML = '';
+
+        q.options.forEach((opt, index) => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.textContent = opt;
+            btn.onclick = () => checkAnswer(index, btn);
+            optionsContainer.appendChild(btn);
+        });
+    }
+
+    function checkAnswer(selectedIndex, btnElement) {
+        // Deshabilitar todos los botones
+        const buttons = document.querySelectorAll('.option-btn');
+        buttons.forEach(b => b.disabled = true);
+
+        const currentQ = questions[currentQuestionIndex];
+        const feedback = document.getElementById('feedback-msg');
+
+        if (selectedIndex === currentQ.correct) {
+            btnElement.classList.add('correct');
+            feedback.textContent = "¡Correcto!";
+            feedback.style.color = "var(--success)";
+            score++;
+        } else {
+            btnElement.classList.add('incorrect');
+            // Mostrar la correcta
+            buttons[currentQ.correct].classList.add('correct');
+            feedback.textContent = "Incorrecto";
+            feedback.style.color = "var(--error)";
+        }
+
+        document.getElementById('next-btn').classList.remove('hidden');
+    }
+
+    function nextQuestion() {
+        currentQuestionIndex++;
+        if (currentQuestionIndex < questions.length) {
+            loadQuestion();
+        } else {
+            finishExam();
+        }
+    }
+
+    function finishExam() {
+        clearInterval(timerInterval);
+        examScreen.classList.add('hidden');
+        resultScreen.classList.remove('hidden');
+
+        const percentage = Math.round((score / questions.length) * 100);
+        document.getElementById('final-score').textContent = `${percentage}%`;
+        
+        const resultMsg = document.getElementById('result-msg');
+        resultMsg.textContent = `Obtuviste ${score} de ${questions.length} aciertos.`;
+
+        sendResultsToGoogle(percentage);
+    }
+
+    function sendResultsToGoogle(finalScore) {
+        const data = {
+            nombre: userData.nombre,
+            correo: userData.correo,
+            aciertos: score,
+            total: questions.length
+        };
+
+        // Usamos 'no-cors' porque Google Apps Script a veces da problemas de CORS en frontend puro
+        // Aunque la respuesta será opaca, el script del lado de Google sí recibirá los datos.
+        fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(() => {
+            document.getElementById('loading-spinner').style.display = 'none';
+            resultMsg.innerHTML += "<br><strong>Resultados enviados exitosamente al profesor.</strong>";
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('loading-spinner').style.display = 'none';
+            resultMsg.innerHTML += "<br><span style='color:red'>Error al enviar resultados (revisa la consola).</span>";
+        });
+    }
+</script>
+
+</body>
+</html>
